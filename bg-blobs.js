@@ -62,14 +62,25 @@
     function normalizeLogo(img, maxPx, invert) {
         if (!img.naturalWidth || !img.naturalHeight) return fallbackHit(maxPx);
 
+        /* Rasterize first (and upscale small/SVG intrinsics) so crop uses a
+         * bitmap. drawImage source-rects on SVG images are unreliable and
+         * leave the mark undersized in the output box. */
+        var nw = img.naturalWidth;
+        var nh = img.naturalHeight;
+        var boost = 1;
+        var longSide = Math.max(nw, nh);
+        if (longSide < maxPx * 4) {
+            boost = Math.max(1, Math.ceil((maxPx * 4) / longSide));
+        }
+
         var src = document.createElement("canvas");
-        src.width = img.naturalWidth;
-        src.height = img.naturalHeight;
+        src.width = Math.max(1, Math.round(nw * boost));
+        src.height = Math.max(1, Math.round(nh * boost));
         var sctx = src.getContext("2d", { willReadFrequently: true });
         if (!sctx) return fallbackHit(maxPx);
 
         try {
-            sctx.drawImage(img, 0, 0);
+            sctx.drawImage(img, 0, 0, src.width, src.height);
         } catch (e) {
             return fallbackHit(maxPx);
         }
@@ -117,7 +128,8 @@
             /* Draw black silhouette then invert → white mark on transparent. */
             octx.filter = "brightness(0) invert(1)";
         }
-        octx.drawImage(img, minX, minY, cropW, cropH, dx, dy, dw, dh);
+        /* Crop from the raster canvas, never from the original SVG/img. */
+        octx.drawImage(src, minX, minY, cropW, cropH, dx, dy, dw, dh);
         octx.filter = "none";
 
         var data;
